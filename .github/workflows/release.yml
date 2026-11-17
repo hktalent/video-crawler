@@ -1,0 +1,187 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（如 v1.0.0）'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: amd64
+            name: darwin-amd64
+            ext: ''
+          - goos: darwin
+            goarch: arm64
+            name: darwin-arm64
+            ext: ''
+          - goos: linux
+            goarch: amd64
+            name: linux-amd64
+            ext: ''
+          - goos: linux
+            goarch: arm64
+            name: linux-arm64
+            ext: ''
+          - goos: windows
+            goarch: amd64
+            name: windows-amd64
+            ext: '.exe'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Install UPX
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq upx-ucl
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          COMMIT="${GITHUB_SHA::8}"
+          BUILD_TIME="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          OUT="video-crawler-${{ matrix.name }}${{ matrix.ext }}"
+
+          go build \
+            -trimpath \
+            -ldflags "-s -w -buildid= \
+              -X main.Version=${VERSION} \
+              -X main.Commit=${COMMIT} \
+              -X main.BuildTime=${BUILD_TIME}" \
+            -o "${OUT}" .
+
+          echo "=== 压缩前 ==="
+          ls -lh "${OUT}"
+
+          # UPX 压缩（windows 可执行文件压缩可能有兼容性问题，保守处理）
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            upx --best "${OUT}" || echo "UPX 压缩失败，保留原文件"
+          else
+            upx --best --lzma "${OUT}" || echo "UPX 压缩失败，保留原文件"
+          fi
+
+          echo "=== 压缩后 ==="
+          ls -lh "${OUT}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-crawler-${{ matrix.name }}
+          path: video-crawler-${{ matrix.name }}${{ matrix.ext }}
+          if-no-files-found: error
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum video-crawler-* > checksums.txt
+          echo "=== 产物列表 ==="
+          ls -lh
+          echo "=== checksums ==="
+          cat checksums.txt
+
+      - name: Generate release notes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          cat > release_notes.md << EOF
+          ## Video Crawler ${VERSION}
+
+          ### 下载
+
+          | 平台 | 架构 | 文件 |
+          |------|------|------|
+          | macOS | amd64 | video-crawler-darwin-amd64 |
+          | macOS | arm64 | video-crawler-darwin-arm64 |
+          | Linux | amd64 | video-crawler-linux-amd64 |
+          | Linux | arm64 | video-crawler-linux-arm64 |
+          | Windows | amd64 | video-crawler-windows-amd64.exe |
+
+          ### 校验
+
+          \`\`\`bash
+          sha256sum -c checksums.txt
+          \`\`\`
+
+          ### 使用
+
+          \`\`\`bash
+          ./video-crawler-darwin-amd64 -url https://example.com -out ./videos
+          \`\`\`
+
+          详见 [README.md](https://github.com/${{ github.repository }}/blob/main/README.md)
+          EOF
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Video Crawler ${{ steps.version.outputs.version }}
+          body_path: release_notes.md
+          files: |
+            dist/video-crawler-darwin-amd64
+            dist/video-crawler-darwin-arm64
+            dist/video-crawler-linux-amd64
+            dist/video-crawler-linux-arm64
+            dist/video-crawler-windows-amd64.exe
+            dist/checksums.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

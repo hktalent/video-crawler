@@ -1,0 +1,21 @@
+# 编译产物
+video-crawler
+video-crawler-*
+*.exe
+*.dll
+*.so
+*.dylib
+dist/
+
+# 测试下载目录
+downloads/
+test-downloads/
+videos/
+
+# Go 缓存
+*.test
+*.out
+
+# 系统文件
+.DS_Store
+Thumbs.db
