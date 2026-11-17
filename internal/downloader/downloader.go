@@ -88,6 +88,10 @@ func (d *Downloader) Download(videoURL, pageURL, title string) (string, error) {
 			}
 			dest, err = d.downloadWithFFmpeg(videoURL, pageURL, dest)
 		} else {
+			// 无 ffmpeg 时，webm 无法转码为 mp4，直接跳过
+			if strings.Contains(strings.ToLower(videoURL), ".webm") {
+				return "", fmt.Errorf("webm 格式需要 ffmpeg 转码，当前未安装 ffmpeg，跳过")
+			}
 			// 兜底按 mp4 下载
 			dest = filepath.Join(d.OutDir, filename+".mp4")
 			if utils.FileExists(dest) {
@@ -136,14 +140,14 @@ func (d *Downloader) getContentLength(videoURL, pageURL string) int64 {
 	return resp.ContentLength
 }
 
-// videoExt 从 URL 提取视频扩展名
+// videoExt 从 URL 提取视频扩展名（不含 webm，webm 走 ffmpeg 转码为 mp4）
 func videoExt(rawURL string) string {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return ""
 	}
 	path := strings.ToLower(u.Path)
-	exts := []string{".mp4", ".webm", ".mov", ".mkv", ".m4v", ".avi", ".flv", ".ts"}
+	exts := []string{".mp4", ".mov", ".mkv", ".m4v", ".avi", ".flv", ".ts"}
 	for _, ext := range exts {
 		if strings.HasSuffix(path, ext) {
 			return ext
