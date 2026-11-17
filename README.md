@@ -46,6 +46,8 @@ go build -trimpath -ldflags="-s -w" -o video-crawler .
 
 # 携带 Cookie 访问需要登录的页面
 ./video-crawler -url https://example.com -cookie "sessionid=xxx; csrftoken=yyy"
+
+pc4 dist/video-crawler-darwin-amd64 -url https://cn.pornhub.com/categories/hentai -depth 5 -min-views 2 -max-pages 1000 -out ./videos/
 ```
 
 ## 命令行参数

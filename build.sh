@@ -83,10 +83,15 @@ build_one() {
     # 可选压缩
     if [[ "$COMPRESS" == "upx" ]]; then
         if command -v upx >/dev/null 2>&1; then
-            info "  UPX 压缩中..."
-            upx --best --lzma "$outpath" >/dev/null 2>&1 || warn "  UPX 压缩失败，保留原文件"
-            size="$(stat -f%z "$outpath" 2>/dev/null || stat -c%s "$outpath" 2>/dev/null || echo 0)"
-            info "  压缩后: $(numfmt --to=iec "$size" 2>/dev/null || echo "${size} B")"
+            # macOS 二进制经 UPX 压缩后会因 Mach-O 签名问题运行时崩溃，跳过
+            if [[ "$goos" == "darwin" ]]; then
+                warn "  macOS 平台跳过 UPX 压缩（压缩后会运行崩溃）"
+            else
+                info "  UPX 压缩中..."
+                upx --best --lzma "$outpath" >/dev/null 2>&1 || warn "  UPX 压缩失败，保留原文件"
+                size="$(stat -f%z "$outpath" 2>/dev/null || stat -c%s "$outpath" 2>/dev/null || echo 0)"
+                info "  压缩后: $(numfmt --to=iec "$size" 2>/dev/null || echo "${size} B")"
+            fi
         else
             warn "  upx 未安装，跳过压缩 (brew install upx)"
         fi

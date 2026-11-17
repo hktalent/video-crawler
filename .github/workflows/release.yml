@@ -88,8 +88,11 @@ jobs:
           echo "=== 压缩前 ==="
           ls -lh "${OUT}"
 
-          # UPX 压缩（windows 可执行文件压缩可能有兼容性问题，保守处理）
-          if [ "${{ matrix.goos }}" = "windows" ]; then
+          # UPX 压缩
+          # macOS 二进制经 UPX 压缩后会因 Mach-O 签名问题运行时崩溃（fatal: bad g in signal handler），跳过
+          if [ "${{ matrix.goos }}" = "darwin" ]; then
+            echo "macOS 平台跳过 UPX 压缩"
+          elif [ "${{ matrix.goos }}" = "windows" ]; then
             upx --best "${OUT}" || echo "UPX 压缩失败，保留原文件"
           else
             upx --best --lzma "${OUT}" || echo "UPX 压缩失败，保留原文件"
