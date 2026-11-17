@@ -22,10 +22,13 @@ type Downloader struct {
 	Headers   map[string]string
 	OutDir    string
 	UseFFmpeg bool
+	MinSize   int64 // 最小视频大小（字节），小于此值的视频将被跳过
 }
 
 // New 创建下载器
-func New(outDir string) *Downloader {
+// outDir: 输出目录
+// minSize: 最小视频大小（字节），0 表示不限制
+func New(outDir string, minSize int64) *Downloader {
 	return &Downloader{
 		Client: &http.Client{
 			Timeout: 30 * time.Minute,
@@ -38,6 +41,7 @@ func New(outDir string) *Downloader {
 		Headers:   utils.CommonHeaders(),
 		OutDir:    outDir,
 		UseFFmpeg: ffmpegAvailable(),
+		MinSize:   minSize,
 	}
 }
 
@@ -55,33 +59,81 @@ func (d *Downloader) Download(videoURL, pageURL, title string) (string, error) {
 		filename = "video_" + utils.RandomID(4)
 	}
 
+	// 对于直链视频，预检查 Content-Length（如果服务端支持 HEAD）
+	if d.MinSize > 0 && ext != "" && !strings.Contains(strings.ToLower(videoURL), ".m3u8") {
+		if size := d.getContentLength(videoURL, pageURL); size > 0 && size < d.MinSize {
+			return "", fmt.Errorf("视频大小 %s 小于最小限制 %s，跳过",
+				utils.FormatBytes(size), utils.FormatBytes(d.MinSize))
+		}
+	}
+
+	var dest string
+	var err error
+
 	switch {
 	case strings.Contains(strings.ToLower(videoURL), ".m3u8"):
-		return d.downloadHLS(videoURL, pageURL, filename)
+		dest, err = d.downloadHLS(videoURL, pageURL, filename)
 	case ext != "":
-		dest := filepath.Join(d.OutDir, filename+ext)
+		dest = filepath.Join(d.OutDir, filename+ext)
 		if utils.FileExists(dest) {
 			return dest, nil
 		}
-		err := d.downloadDirect(videoURL, pageURL, dest)
-		return dest, err
+		err = d.downloadDirect(videoURL, pageURL, dest)
 	default:
 		// 未知类型，尝试用 ffmpeg 下载
 		if d.UseFFmpeg {
-			dest := filepath.Join(d.OutDir, filename+".mp4")
+			dest = filepath.Join(d.OutDir, filename+".mp4")
 			if utils.FileExists(dest) {
 				return dest, nil
 			}
-			return d.downloadWithFFmpeg(videoURL, pageURL, dest)
+			dest, err = d.downloadWithFFmpeg(videoURL, pageURL, dest)
+		} else {
+			// 兜底按 mp4 下载
+			dest = filepath.Join(d.OutDir, filename+".mp4")
+			if utils.FileExists(dest) {
+				return dest, nil
+			}
+			err = d.downloadDirect(videoURL, pageURL, dest)
 		}
-		// 兜底按 mp4 下载
-		dest := filepath.Join(d.OutDir, filename+".mp4")
-		if utils.FileExists(dest) {
-			return dest, nil
-		}
-		err := d.downloadDirect(videoURL, pageURL, dest)
-		return dest, err
 	}
+
+	if err != nil {
+		return "", err
+	}
+
+	// 下载后校验文件大小，小于 MinSize 则删除
+	if d.MinSize > 0 {
+		if info, statErr := os.Stat(dest); statErr == nil {
+			if info.Size() < d.MinSize {
+				os.Remove(dest)
+				return "", fmt.Errorf("视频大小 %s 小于最小限制 %s，已删除",
+					utils.FormatBytes(info.Size()), utils.FormatBytes(d.MinSize))
+			}
+		}
+	}
+
+	return dest, nil
+}
+
+// getContentLength 通过 HEAD 请求获取文件大小，失败返回 0
+func (d *Downloader) getContentLength(videoURL, pageURL string) int64 {
+	headers := copyMap(d.Headers)
+	headers["Referer"] = pageURL
+
+	req, err := http.NewRequest("HEAD", videoURL, nil)
+	if err != nil {
+		return 0
+	}
+	utils.ApplyHeaders(req, headers)
+	resp, err := d.Client.Do(req)
+	if err != nil {
+		return 0
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0
+	}
+	return resp.ContentLength
 }
 
 // videoExt 从 URL 提取视频扩展名

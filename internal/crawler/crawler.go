@@ -20,6 +20,7 @@ type Config struct {
 	StartURL  string // 起始 URL
 	OutDir    string // 输出目录
 	MinViews  int64  // 最小观看次数
+	MinSize   int64  // 最小视频大小（字节）
 	MaxDepth  int    // 最大爬取深度
 	MaxPages  int    // 最大页面数（0 表示不限制）
 	Workers   int    // 并发数
@@ -79,7 +80,7 @@ func New(cfg Config) (*Crawler, error) {
 		cfg:        cfg,
 		client:     &http.Client{Timeout: 60 * time.Second},
 		headers:    headers,
-		downloader: downloader.New(cfg.OutDir),
+		downloader: downloader.New(cfg.OutDir, cfg.MinSize),
 		visited:    make(map[string]bool),
 	}
 	if cfg.Workers <= 0 {

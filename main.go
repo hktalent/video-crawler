@@ -22,10 +22,11 @@ var (
 func main() {
 	showVersion := flag.Bool("version", false, "显示版本信息")
 	startURL := flag.String("url", "", "目标网站 URL（必填）")
-	outDir := flag.String("out", "./downloads", "视频保存目录")
+	outDir := flag.String("out", "videos", "视频保存目录")
 	minViews := flag.Int64("min-views", 100000, "最小观看次数阈值")
-	maxDepth := flag.Int("depth", 2, "最大爬取深度")
-	maxPages := flag.Int("max-pages", 50, "最大抓取页面数（0 表示不限制）")
+	minSize := flag.Int64("min-size", 5, "最小视频大小（MB，小于此值的视频将被跳过）")
+	maxDepth := flag.Int("depth", 5, "最大爬取深度")
+	maxPages := flag.Int("max-pages", 1000, "最大抓取页面数（0 表示不限制）")
 	workers := flag.Int("workers", 4, "并发爬取数")
 	sameHost := flag.Bool("same-host", true, "是否只爬取同域页面")
 	cookieStr := flag.String("cookie", "", "请求 Cookie 字符串")
@@ -73,6 +74,7 @@ func main() {
 		StartURL:  *startURL,
 		OutDir:    *outDir,
 		MinViews:  *minViews,
+		MinSize:   *minSize * 1024 * 1024,
 		MaxDepth:  *maxDepth,
 		MaxPages:  *maxPages,
 		Workers:   *workers,

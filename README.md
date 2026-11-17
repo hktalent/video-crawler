@@ -46,8 +46,6 @@ go build -trimpath -ldflags="-s -w" -o video-crawler .
 
 # 携带 Cookie 访问需要登录的页面
 ./video-crawler -url https://example.com -cookie "sessionid=xxx; csrftoken=yyy"
-
-pc4 dist/video-crawler-darwin-amd64 -url https://cn.pornhub.com/categories/hentai -depth 5 -min-views 2 -max-pages 1000 -out ./videos/
 ```
 
 ## 命令行参数
@@ -55,10 +53,11 @@ pc4 dist/video-crawler-darwin-amd64 -url https://cn.pornhub.com/categories/henta
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `-url` | （必填） | 目标网站 URL |
-| `-out` | `./downloads` | 视频保存目录 |
+| `-out` | `videos` | 视频保存目录 |
 | `-min-views` | `100000` | 最小观看次数阈值 |
-| `-depth` | `2` | 最大爬取深度 |
-| `-max-pages` | `50` | 最大抓取页面数（0 不限制） |
+| `-min-size` | `5` | 最小视频大小（MB，小于此值的视频将被跳过） |
+| `-depth` | `5` | 最大爬取深度 |
+| `-max-pages` | `1000` | 最大抓取页面数（0 不限制） |
 | `-workers` | `4` | 并发爬取数 |
 | `-same-host` | `true` | 是否只爬取同域页面 |
 | `-cookie` | — | 请求 Cookie 字符串 |
