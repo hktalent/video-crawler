@@ -29,7 +29,6 @@ go build -trimpath -ldflags="-s -w" -o video-crawler .
 # 或使用脚本编译多平台
 ./build.sh all          # 编译全部平台
 ./build.sh linux-amd64  # 编译指定平台
-./build.sh all upx      # 编译后用 upx 压缩
 ```
 
 ### 运行
@@ -128,9 +127,10 @@ video-crawler/
 | `-ldflags="-w"` | 去除 DWARF 调试信息 |
 | `-ldflags="-buildid="` | 去除 buildid |
 | `CGO_ENABLED=0` | 静态编译，不依赖系统 C 库，可跨平台运行 |
-| `upx --best --lzma` | （可选）UPX 压缩，进一步减小体积约 40-60% |
 
-优化后二进制体积约 8MB（原始 12.5MB），UPX 压缩后约 3-4MB。
+优化后二进制体积约 8MB（原始 12.5MB）。
+
+> **不要用 UPX 压缩产物。** Go 运行时要求信号处理线程上持有有效的 `g`，UPX 壳会在外来线程上收信号且无法挂接 `m`，运行时直接打印 `fatal: bad g in signal handler` 并 `exit 2` 崩溃（`CGO_ENABLED=0` 时必崩）。构建脚本已全局禁用 UPX，并在本机产物上自动跑 `-version` 冒烟测试。
 
 ## 注意事项
 

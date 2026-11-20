@@ -80,21 +80,20 @@ build_one() {
     size="$(stat -f%z "$outpath" 2>/dev/null || stat -c%s "$outpath" 2>/dev/null || echo 0)"
     info "  完成: ${outname} ($(numfmt --to=iec "$size" 2>/dev/null || echo "${size} B"))"
 
-    # 可选压缩
-    if [[ "$COMPRESS" == "upx" ]]; then
-        if command -v upx >/dev/null 2>&1; then
-            # macOS 二进制经 UPX 压缩后会因 Mach-O 签名问题运行时崩溃，跳过
-            if [[ "$goos" == "darwin" ]]; then
-                warn "  macOS 平台跳过 UPX 压缩（压缩后会运行崩溃）"
-            else
-                info "  UPX 压缩中..."
-                upx --best --lzma "$outpath" >/dev/null 2>&1 || warn "  UPX 压缩失败，保留原文件"
-                size="$(stat -f%z "$outpath" 2>/dev/null || stat -c%s "$outpath" 2>/dev/null || echo 0)"
-                info "  压缩后: $(numfmt --to=iec "$size" 2>/dev/null || echo "${size} B")"
-            fi
-        else
-            warn "  upx 未安装，跳过压缩 (brew install upx)"
+    # 冒烟测试：仅对当前主机可直接执行的产物验证，避免打包出一个跑不起来的二进制
+    if [[ "$goos" == "$(go env GOOS)" && "$goarch" == "$(go env GOARCH)" ]]; then
+        if ! "$outpath" -version >/dev/null 2>&1; then
+            error "冒烟测试失败：${outname} 无法正常运行"
         fi
+        info "  冒烟测试通过 (-version)"
+    fi
+
+    # UPX 压缩已禁用（所有平台）
+    #   Go 运行时要求在自身线程上持有有效的 g。UPX 之类的壳在运行时会用到外来线程
+    #  （非 Go 创建的线程），信号一旦落在这些线程上，无法挂接 m，运行时直接打印
+    #  “fatal: bad g in signal handler” 并 exit 2 崩溃（CGO_ENABLED=0 时必崩）。
+    if [[ "$COMPRESS" == "upx" ]]; then
+        warn "  已跳过 UPX：Go 二进制压缩后运行会崩溃（fatal: bad g in signal handler）"
     fi
 }
 
